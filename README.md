@@ -5,13 +5,13 @@
 
 ## I. Introduction
 
-This project aims to analyze the effect of school-level sociodemographic indicators on the percentage of NYC public school students passing the NY State Math assessment, accounting for variability at borough levels. The novelty in this project lies in its merging of two distinct NYC public school datasets to derive new insights into indicators for math exam performance via a multi-level model. While some basic summary statistics are publicly available, analyses on both datasets in tandem do not exist online to my knowledge, and neither do analyses that leverage this data to account the multi-level nature of the research question.
+This project aims to analyze the effect of school-level sociodemographic indicators on the percentage of NYC public school students passing the NY State Math assessment, accounting for variability at borough levels. The novelty in this project lies in its merging of two distinct NYC public school datasets to derive new insights into indicators for math exam performance via Bayesian multilevel models. 
 
 ### i. Problem Context
 
-Each year, New York public school students in grades 3-8 take a state-wide math exam known as the NY State Math Test. The assessment contains several different mathematics multiple choice and open-ended questions. Exams are specific to the grade and year, meaning that all NY public school students within the same grade, and within the same year, take the same exam. The exam results are aggregated at the school-level for each grade and year, then released by the Department of Education. There are 4 levels of achievement: 1, 2, 3, and 4. Achieving a 3 or 4 on the exam qualifies as 'passing' the exam.
+Each year, New York public school students in grades 3-8 take a state-wide math exam known as the NY State Math Test. The assessment contains several different mathematics multiple choice and open-ended questions. Exams are specific to the grade and year, meaning that all NY public school students within the same grade, and within the same year, take the same exam. The exam results are aggregated at the school-level for each grade and year, then released by the Department of Education. 
 
-Additionally, demographic data is collected yearly on these same public schools. This data will be described further in the 'Data' section, but it generally includes school data on socioeconomic variables, ethnicity, gender, English-language learners, and special education rates. I use the term 'sociodemographic' factors to encompass both economic demographics (like the percentage of student on free lunch program) and social demographics (percent of students belonging to different races, percentage of male/female students, etc.). This term is used to concisely describe a broad range of social and economic variables.
+Additionally, demographic data is collected yearly on these same public schools through socioeconomic variables, ethnicity, gender, English-language learners, and special education rates. I use the term 'sociodemographic' factors to encompass both economic demographics (like the percentage of student on free lunch program) and social demographics (percent of students belonging to different races, percentage of male/female students, etc.). This term is used to concisely describe a broad range of social and economic variables.
 
 ## II. Data
 
