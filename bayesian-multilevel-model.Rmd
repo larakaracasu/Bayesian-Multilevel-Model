@@ -1,0 +1,605 @@
+---
+title: "Analyzing the Effect of School-level Sociodemographic Factors on State Math Assessment Results in NYC Public Schools"
+author: "Lara Karacasu"
+date: "`r Sys.Date()`"
+output:
+  pdf_document: default
+  html_document: default
+subtitle: Applied Bayesian Analysis, Fall '23
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# I. Introduction
+
+This project seeks to analyze the effect of school-level sociodemographic indicators on the percentage of NYC public school students passing the NY State Math assessment, accounting for variability at borough levels. The novelty in this project lies in its merging of two distinct NYC public school datasets to derive new insights into indicators for math exam performance via a multi-level model. While some basic summary statistics are publicly available, <a href="https://www.schools.nyc.gov/about-us/reports/doe-data-at-a-glance">as published by the DOE</a>, analyses on both datasets in tandem do not exist online to my knowledge, and neither do analyses that leverage this data to account the multi-level nature of the research question. 
+
+## i. Context
+Each year, New York public school students in grades 3-8 take a state-wide math exam known as the <a href="https://www.schools.nyc.gov/learning/testing/ny-state-math">NY State Math Test</a>. The assessment contains several different mathematics multiple choice and open-ended questions. Exams are specific to the grade and year, meaning that all NY public school students within the same grade, and within the same year, take the same exam. The exam results are aggregated at the school-level for each grade and year, then released by the Department of Education. There are 4 levels of achievement: 1, 2, 3, and 4. Achieving a 3 or 4 on the exam qualifies as 'passing' the exam.
+
+Additionally, demographic data is collected yearly on these same public schools. This data will be described further in the 'Data' section, but it generally includes school data on socioeconomic variables, ethnicity, gender, English-language learners, and special education rates. I use the term 'sociodemographic' factors to encompass both economic demographics (like the percentage of student on free lunch program) social demographics (percent of students belonging to different races, percentage of male/female student, etc.). This term is used to concisely describe a broad range of social and economic variables.
+
+## ii. What it is used for
+
+The exam data itself is used so that NY state can determine school-level mathematics performance. Schools with lower pass rates may receive additional state support, as lower pass rates indicate that the schools may not currently be meeting state-wide mathematics standards for grades 3 - 8. The data itself is released for public use, to inform the public of general school performance in the NY State Math Test. The school-level demographic information is used for similar reasons, as the state often makes financial and political decisions based on school demographics. I will use this data to understand how school-level socioeconomic factors are linked to school pass rates, while controlling for borough-level differences.
+
+## iii. Limitations
+
+There are several limitations and assumptions involved. For the sake of brevity, I will list them below: 
+
+1. This project specifically uses exam result data from 2006 - 2012. Results cannot be generalized to time periods outside of this range without additional evidence.
+
+2. The DOE data has been aggregated at the school-level. Thus, data from individual students is not tracked, and student-level factors have not been accounted for within the data. That is, the data does not track the individual data of each student, so conclusions can only be made starting at the school-level. Additionally, the data contains district-level data, which I do clean and transform, I only focus on school-within-borough nesting in the scope of this analysis.
+
+3. The school-level accounts do not include features for many other socioeconomic factors that could be at play. There are many potentially significant variables that may have been omitted due to data accessibility, including school-level homelessness rates, parent income levels, single parent household rates, and more. Thus, it is possible that there are unaccounted-for variables that would change result conclusions if accounted for: such is the nature of the data provided by DOE. 
+
+4. The final dataset has over 24,000 observations. Additionally, some schools are 'incomplete' in the sense that they do not have values for all grades, all years, or all predictors. In order to both reduce the massive size of the dataset (so that my machine can actually create the models), and handle the missing values, I drop 'incomplete' schools. That is, I only keep schools that have values for all grades, all years, and all predictors. This is a naive approach and could introduce bias if there are patterns in the missing values. Additionally, because this only reduced my dataset to around 13,000 observations -- still far too large for my laptop to handle -- I limit my analysis to students in grade 8, in the year 2008. The reasoning is that subsetting the data in this way allowed me to control for a given year and grade, while still maintaining differences between schools across the boroughs.
+
+# II. Data
+
+The data needed to accomplish this project includes school-level information about sociodemographic factors as well as information about each borough in which each school is located. Such features were not present in a singular dataset, so I decided to merge two different datasets over the 2006 - 2012 time period from NYC Open Data, Department of Education. The datasets are as follows: <a href="https://www.schools.nyc.gov/learning/testing/ny-state-math">“2006 - 2012 School Demographics and Accountability Snapshot”</a> and <a href="https://www.schools.nyc.gov/learning/testing/ny-state-math">“2006 - 2012 Math Test Results - All Students."</a> 
+
+## i. Variables
+
+### Variables in Demographic Data
+
+The first dataset tracks annual school accounts of NYC public school student populations served by grade, special programs, ethnicity, gender and Title I funded programs. 
+
+```{r}
+data1 <- read.csv("C:/Users/larak/OneDrive/Documents/Applied Bayesian Analysis/2006_-_2012_School_Demographics_and_Accountability_Snapshot_20231222.csv") 
+head(data1)
+```
+
+```{r}
+dim(data1)
+```
+As shown above, there are many columns in the dataset, but only a few will be used. These variables are as follows:
+
+1. DBN: a unique NYC school identifier that includes district (first two characters]), borough (third character), and school number (fourth through sixth characters). A DBN of 01M015 would represent District 01, in Manhattan, for School 15. 
+
+2. Name: school name.
+
+3. Schoolyear: school year in which the exam was conducted.
+
+4. frl_percent: percentage of students eligible for free or reduced cost lunch.
+
+5. fl_percent: percentage of students eligible for free lunch.
+
+6. grade: prek through grade12 columns are represented, but only grade3 through grade8 will be relevant.
+
+7. ell_percent: percentage of English-language learners within the school grade during a given year.
+
+8. white_per, asian_per, black_per, hispanic_per: percentage of students who identify as the specified race within the school grade during a given year.
+
+### Variables in Math Exam Data
+
+The second dataset tracks NYC school performance on state math exams. The response variable will be ‘Pct Level 3 and 4,’ the percentage of students at the school, for a given grade level and year, who scored proficient or advanced proficient in the math assessment. This is essentially the percent of students who passed the state math exam.
+
+```{r}
+data2 <- read.csv("C:/Users/larak/OneDrive/Documents/Applied Bayesian Analysis/2006_-_2012__Math_Test_Results__-_All_Students_20231222.csv") 
+head(data2)
+```
+
+```{r}
+dim(data2)
+```
+As shown above, there are many column in the dataset, but only a few will be used. The relevant variables are as follows:
+
+1. DBN: Same as the other dataset.
+
+2. Grade: Same as the other dataset.
+
+3. Year: Same as the other dataset, but represented as the singular year during the spring in which the exam is taken.
+
+4. Pct.Level.3.and.4: Percentage of students tested within a given grade, year, and school, who passed the state math exam.
+
+
+## ii. Research Question
+
+The research question is as follows: How do school-level socioeconomic predictors, such as enrollment and demographics, influence the percentage of students passing the assessment (Pct Level 3 or 4) across different schools, accounting for variability at the borough level?
+
+## iii. Statistical Method
+
+I use a hierarchical Beta regression models to analyze the data. The response variable is the percent of students passing the state math exam, and subsequently, the models have a Beta-distributed likelihood for the response variable. Additionally, a multi-level model is required to account for the nested levels o. There are three levels in my dataset: School > District > Borough, and I will include school-level random intercepts for districts and boroughs. I will include fixed effects for grade level and year. I will also include school-level fixed effects for the sociodemographic predictors, including the percentage of students on FRL (free and reduced lunch) or FL (free lunch) as well as racial demographics.
+
+## iv. Data preprocessing
+
+A preprocessing pipeline is needed to ensure data quality and comparability prior to the analysis. I will explain and demonstrate the pipeline within this document for the sake of completeness. I recognize that this pipeline will lengthen the report, so please feel free to just skim over this section if necessary.
+
+The steps are as follows:
+
+### 1. Dropping columns
+
+We will only keep columns that are relevant to the analysis -- these are the columns mentioned in the previous section.
+
+#### Dropping columns from demographic data
+
+```{r, message=FALSE}
+library(dplyr)
+library(tidyverse)
+library(rethinking)
+library(stringr)
+```
+
+
+```{r}
+clean1 <- data1[c("DBN", "Name", "schoolyear", "fl_percent", "frl_percent", "grade3", "grade4", "grade5", "grade6", "grade7", "grade8", "ell_percent", "asian_per", "black_per", "hispanic_per", "white_per")]
+head(clean1)
+```
+
+#### Dropping columns from exam data
+```{r}
+clean2 <- data2[c("DBN", "Grade", "Year", "Pct.Level.3.and.4")]
+head(clean2)
+```
+
+### 2. Data standardization
+
+I will: 
+1. Standardize column names across the two datasets.
+
+```{r}
+clean1 <- clean1 %>% rename('Year' = 'schoolyear')
+```
+
+2. Standardize school year representation. The same school year is represented differently in the two datasets (the first by the year in the spring, the second by range of the school year).
+```{r}
+clean1 <- clean1 %>% mutate(Year = str_sub(Year, -4, -1))
+```
+
+3. Reformat the first dataset so that a row represents a combination of unique DBN, grade, and year.
+
+```{r}
+clean1 <- clean1 %>% 
+  pivot_longer(cols = starts_with("grade"), 
+               names_to = "Grade", 
+               values_drop_na = FALSE) %>%
+  mutate(Grade = readr::parse_number(Grade)) %>%
+  rename('Number.Tested' = 'value') %>%
+  relocate(Grade, .before = names(clean1)[3])
+head(clean1)
+```
+
+### 3. Merging data
+We must perform an inner join on the DBN, school year, and grade level.
+
+```{r}
+class(clean2$Grade) <- 'double'
+class(clean1$Year) <- 'integer'
+class(clean1$fl_percent) <- 'double'
+df <- inner_join(clean1, clean2, by = c("DBN", "Grade", "Year"))
+head(df)
+dim(df)
+```
+
+### 4. Splitting DBN
+Splitting the DBN column into three separate columns: district, borough, and school name. Doing so will enable me to conduct a multilevel analysis, as one row will correspond to a given school, which are nested within boroughs.
+
+```{r}
+df$District <- substr(df$DBN, 1, 2)
+df$Borough <- substr(df$DBN, 3, 3)
+df$School.Number <- substr(df$DBN, 4, 6)
+df <- df %>%
+  relocate(District, .before = names(df)[2]) %>%
+  relocate(Borough, .before = names(df)[2]) %>%
+  relocate(School.Number, .before = names(df)[2]) %>%
+  relocate(Pct.Level.3.and.4, .before = 8)
+class(df$Pct.Level.3.and.4) <- 'double'
+head(df, 20)
+dim(df)
+```
+### 5. Handling missing data and downsizing
+
+As we can see, I currently have about 24,000 rows (each of which represent a different school/grade/year combination). This is far too large to run any models efficiently. I will need to reduce the length of the data substantially, to around 1000 rows or so. Additionally, we can see that there are some NA cells in the data -- each school in the data only has a value for either frl_lunch (free or reduced lunch) OR free lunch. These variables are also likely to be multicollinear due to fl_lunch being a subset of frl_lunch, so we should only keep one of them. 
+
+Let's check which has higher proportion in the dataset.
+
+```{r}
+sum(!is.na(df['frl_percent']))
+sum(!is.na(df['fl_percent']))
+```
+As we can see, more rows use the 'free lunch' designation over 'free or reduced lunch'. So, we shall drop the frl_percent column.
+
+```{r}
+df <- df %>% select(-frl_percent, -Name, -Number.Tested)
+final_df <- drop_na(df)
+head(final_df)
+dim(final_df)
+```
+Even after dropping all rows with any NA values, the dataframe has over 13,000 tuples.
+
+Note: I initially intended to use this full dataset, but it was still far too large for the model to run properly on my laptop. Thus, I will limit my analysis to a single year: 2009. Doing this will also help control for some variability in the model that might be introduced by the temporal element. I chose the year 2009 simply because it had the most observations out of the years within the dataset.
+
+```{r}
+final_df <- final_df[final_df$Year == 2008, ]
+final_df <- final_df %>% select(-Year)
+print(final_df)
+```
+
+The cleaned dataset has about 3200 rows. Unfortunately, this is still far too many for our purposes, so we will need to refine our analysis further. I will additionally 
+
+```{r}
+final_df <- final_df[final_df$Grade == 8, ]
+final_df <- final_df %>% select(-Grade)
+head(final_df)
+```
+
+~400 rows is a reasonable number of rows to ensure fast processing time on my device. Although this will limit the generalizability of the conclusions, it will also control for additional variables preemptively, which could benefit model convergence. 
+
+# III. Priors
+
+I chose a beta regression model due to the response variable being a proportion (percentage of students who passed the exam). Thus, the priors will be those of beta regression, and we also need to account for the hierarchical structure of schools within districts within boroughs.  
+
+Note: after attempting the analysis portion, I initially ran into many strange RStan model compilation errors. After much debugging, I realized that one of them was due to the model breaking due to the presence of some 1.000 values in the dataset -- quite problematic for my beta regression. To deal with this challenge without sacrificing my beta regression (which is appropriate for my percentage response variable), I apply a data transformation to adjust the boundaries for the response variable to be strictly within (0, 1). Such a transformation only marginally changes the actual pass rate values, as I choose a very small epsilon value for the transformation.
+
+Additionally, I had some trouble with rogue values from the 'out from the wild' data, so I employed some of the preprocessing steps from class. I use a unique integer identifier for each school, district, and borough. I additionally scale the percentage columns to range from [0, 1] for consistency.
+
+```{r}
+data3 <- final_df
+
+# For Beta regression
+data3$Pass_Rate <- data3$Pct.Level.3.and.4 / 100
+epsilon <- 1e-4
+data3$Pass_Rate <- pmin(pmax(data3$Pass_Rate, epsilon), 1 - epsilon)
+
+# Encoding factor variables as integers so that each has a unique numerical identifier
+data3$School_Number <- as.integer(as.factor(data3$School.Number))
+data3$District <- as.integer(as.factor(data3$District))
+data3$Borough <- as.integer(as.factor(data3$Borough))
+data3$School <- 1:nrow(data3)
+data3$DBN<- as.integer(as.factor(data3$DBN))
+
+# No need for these because they're redundant with existing columns
+data3 <- data3 %>% select(-School.Number, -School_Number, -Pct.Level.3.and.4, -DBN)
+
+# Scale the percent columns between 0 and 1
+divide_perc_columns_by_100 <- function(df) {
+    perc_cols <- grep("per", names(df))
+    df[, perc_cols] <- df[, perc_cols] / 100
+    return(df)
+}
+data3 <- divide_perc_columns_by_100(data3) %>% relocate(School, .before = 1) %>% relocate(Pass_Rate, .before = 4)
+head(data3, 10)
+dim(data3)
+```
+
+Finally, it looks suitable for the multi-level models! Note that I used unique integers for the levels, so the integers do not have direct intrinsic meanings: they only encode my factors.
+
+## Analysis 1: Uninformative Priors
+
+Since EOD has not released any formal analyses using these datasets, it makes sense to use uninformative priors for one choice. We can break down the priors by choice of fixed vs. random effects for the model.
+
+Fixed effects variables are as follows: School-level sociodemographic factors (fl_percent, ell_percent, white_per, black_per, hispanic_per, asian_per). These variables are assumed to have a consistent impact across all schools and boroughs. For example, the influence of a specific grade level on the pass rate is considered uniform across the dataset.
+
+Random effects variables are as follows: School and Borough. These variables represent different hierarchical levels, capturing the nested nature of the data (schools within boroughs). The random effects account for the variability at different levels of the model, acknowledging that different boroughs might have unique characteristics influencing the outcome.
+
+### Model 1.1: Nested Hierarchical Model, Uninformative Priors
+
+For the fixed effects, I will choose normally distributed priors with a mean of zero and a large standard deviation (e.g., dnorm(0, 1)). This choice indicates that before seeing the data, we have no strong expectations about the magnitude of the effects. 
+
+Our priors at the school level will be normal distribution centered around the borough mean, with an unknown standard deviation (e.g., a_school[school] ~ dnorm(a_borough[borough], sigma_school)). This reflects that each school's effect is a deviation from its borough's average effect. At the base borough level, we simply use another uninformative prior (e.g., a_borough[borough] ~ dnorm(0, 1)).
+
+My rationale for the use of broad normal distributions as uninformative priors allows the data to primarily inform the posterior estimates. This is particularly useful because there's a lack of strong prior knowledge or assumptions about the parameters, as the data hasn't been publicly analyzed by EOD.
+
+```{r, warning=FALSE, message=FALSE}
+set.seed(10)
+m_uninformative_1 <- ulam(
+  alist(
+    Pass_Rate ~ dbeta(mu, phi),
+    logit(mu) <- a_school[School] + a_borough[Borough] +
+                 b_fl*fl_percent + b_ell*ell_percent +
+                 b_asian*asian_per + b_black*black_per + b_hispanic*hispanic_per + b_white*white_per,
+    
+    # Priors for fixed effects
+    b_fl ~ dnorm(0, 1),
+    b_ell ~ dnorm(0, 1),
+    b_asian ~ dnorm(0, 1),
+    b_black ~ dnorm(0, 1),
+    b_hispanic ~ dnorm(0, 1),
+    b_white ~ dnorm(0, 1),
+    
+    # Random effects
+    a_school[School] ~ dnorm(a_borough[Borough], sigma_school),
+    a_borough[Borough] ~ dnorm(0, 1),
+    
+    # Hyperpriors
+    sigma_school ~ dexp(1),
+    sigma_borough ~ dexp(1),
+    phi ~ dexp(1)
+  ),
+  data = data3,
+  chains = 4,
+  cores = 4,
+  log_lik = TRUE
+)
+```
+
+```{r}
+precis(m_uninformative_1)
+```
+
+```{r}
+traceplot(m_uninformative_1, pars = c("b_fl", "b_ell", "b_asian", "b_black", "b_hispanic", "b_white", "sigma_school", "sigma_borough", "phi"))
+```
+
+## Model 1.1.2: Attempting to Fix Convergence
+
+It seems that the nested model had some convergence issues, specifically with sigma_school having a high Rhat value and low n_eff. I conjecture that it could be due to the mu parameter becoming exactly 0 or 1. 
+
+This can happen due to the values of predictors and random effects leading to extreme values on the logit scale, which, when transformed back to the probability scale, become 0 or 1. I attempt to fix it with a direct logistic regression transformation: I'll transform the predictor directly using the inv_logit function to ensure that mu stays between 0 and 1, exclusive, because the logistic function inherently bounds the output between 0 and 1.
+
+```{r, warning=FALSE, message=FALSE}
+set.seed(1)
+epsilon <- 1e-4
+m_uninformative_12 <- ulam(
+  alist(
+    Pass_Rate ~ dbeta(mu, phi),
+    
+    # Applying logistic transformation with a safeguard for mu
+    mu <- inv_logit(a_school[School] + a_borough[Borough] +
+                 b_fl*fl_percent + b_ell*ell_percent +
+                 b_asian*asian_per + b_black*black_per +
+                 b_hispanic*hispanic_per + b_white*white_per),
+
+    # Priors for fixed effects
+    b_fl ~ dnorm(0, 1),
+    b_ell ~ dnorm(0, 1),
+    b_asian ~ dnorm(0, 1),
+    b_black ~ dnorm(0, 1),
+    b_hispanic ~ dnorm(0, 1),
+    b_white ~ dnorm(0, 1),
+    
+    # Random effects
+    a_school[School] ~ dnorm(a_borough[Borough], sigma_school),
+    a_borough[Borough] ~ dnorm(0, 1),
+    
+    # Hyperpriors
+    sigma_school ~ dexp(1),
+    sigma_borough ~ dexp(1),
+    phi ~ dexp(1)
+  ),
+  data = data3, chains = 4, cores = 4, log_lik = TRUE
+)
+```
+
+```{r}
+precis(m_uninformative_12)
+```
+
+```{r}
+traceplot(m_uninformative_12, pars = c("b_fl", "b_ell", "b_asian", "b_black", "b_hispanic", "b_white", "phi"))
+```
+
+Unfortunately, the technique did not fix the convergence issues in the nested hierarchical model. Interestingly, it did eliminate the warnings that initially came up when running the previous model. We shall attempt to try another version to see if we can achieve model convergence: a non-nested hierarchical model. Despite schools logically being nested within boroughs, it is possible that the variability within schools might not differ significantly across different boroughs, or the borough-level effects might be minimal compared to the school-level effects. This could lead to difficulties in estimating higher-level (borough) parameters accurately. Thus, we shall try a final non-nested alternative.
+
+## Model 1.2: Non-Nested Hierarchical Model, Uninformative Priors
+
+Now, I will try another version of the model: a non-nested hierarchical model, again with uninformative priors. Based on the nature of the underlying nature -- eg. one school belongs to exactly one borough -- it seems that a nested hierarchical beta regression model would be most fitting for the data. However, I will also build a non-nested hierarchical model to see if this would help with convergence issues.
+
+```{r, warning=FALSE, message=FALSE}
+set.seed(1)
+m_uninformative_2 <- ulam(
+  alist(
+    Pass_Rate ~ dbeta(mu, phi),
+    logit(mu) <- a_school[School] + a_borough[Borough] +
+                 b_fl*fl_percent + b_ell*ell_percent +
+                 b_asian*asian_per + b_black*black_per +
+                 b_hispanic*hispanic_per + b_white*white_per,
+    a_school[School] ~ dnorm(0, 1),
+    a_borough[Borough] ~ dnorm(0, 1),
+    b_fl ~ dnorm(0, 1),
+    b_ell ~ dnorm(0, 1),
+    b_asian ~ dnorm(0, 1),
+    b_black ~ dnorm(0, 1),
+    b_hispanic ~ dnorm(0, 1),
+    b_white ~ dnorm(0, 1),
+    phi ~ dexp(1)
+  ),
+  data = data3, chains = 4, cores = 4, log_lik = TRUE
+)
+```
+
+```{r}
+precis(m_uninformative_2)
+```
+
+The Rhat values for b_fl, b_ell, b_asian, b_black, b_white, and phi are all 1. This seems to indicate that the model_uninformative_2 properly converged. Let's also check the traceplot to ensure that this is the case. 
+
+```{r}
+traceplot(m_uninformative_2, pars = c("b_fl", "b_ell", "b_asian", "b_black", "b_hispanic", "b_white", "phi"))
+```
+
+They do seem to be "fuzzy," normal-looking traceplot that converge. There aren't any clear abnormalities within the traceplot. Thus, we can say that the m_uninformative_2, the model with uninformative and non-nested priors, converged.
+
+## Analysis 2: Weakly Informative Priors
+
+Now, let's find some more informative priors. We can look to past research to come up with some ideas for better priors.
+
+Although I haven't seen any work done with these specific datasets (or specific math exam), there have certainly been previous works that study the influence of different predictors on math performance in general. 
+
+<a href = "https://www.epi.org/publication/five-key-trends-in-u-s-student-performance-progress-by-blacks-and-hispanics-the-takeoff-of-asians-the-stall-of-non-english-speakers-the-persistence-of-socioeconomic-gaps-and-the-damaging-effect/">This study by the Economic Policy Institute</a> examined the impact of socioeconomics and race on standardized academic test scores across different educational levels. They found that, by high school, socioeconomic status (for which free lunch is commonly used as a proxy) is a strong predictor of academic performance on Language Arts and Math exams. They also found that ELL, to a lesser degree than SES, is a significant predictor of performance. and racial factors. Finally, they found that race is also a significant predictor. Thus, based on these findings, I will adjust my own priors by: increase the mean for the prior on fl_percent and decrease the standard deviation, increase the mean for the prior on ell_district, and keep the standard deviations high for the racial predictors.
+
+Let's use the same model set-ups as before, with the same logic, but change the priors to reflect the previous literature better.
+
+## Model 2.1: Nested Hierarchical Model, Informative Priors
+
+```{r, warning=FALSE, message=FALSE}
+set.seed(1)
+m_informative_1 <- ulam(
+  alist(
+    Pass_Rate ~ dbeta(mu, phi),
+    logit(mu) <- a_school[School] + a_borough[Borough] +
+                 b_fl*fl_percent + b_ell*ell_percent +
+                 b_asian*asian_per + b_black*black_per +
+                 b_hispanic*hispanic_per + b_white*white_per,
+    
+    a_school[School] ~ dnorm(a_borough[Borough], sigma_school),
+    a_borough[Borough] ~ dnorm(1, 2),
+    b_fl ~ dnorm(1, 0.5),
+    b_ell ~ dnorm(0.5, 1),
+    b_asian ~ dnorm(0.2, 1),
+    b_black ~ dnorm(0.2, 1),
+    b_hispanic ~ dnorm(0.2, 1.),
+    b_white ~ dnorm(0.2, 1),
+    sigma_school ~ dexp(1),
+    phi ~ dexp(1)
+  ),
+  data = data3,
+  chains = 4,
+  cores = 4,
+  log_lik = TRUE
+)
+```
+
+```{r}
+precis(m_informative_1)
+```
+
+```{r}
+traceplot(m_informative_1, pars = c("b_fl", "b_ell", "b_asian", "b_black", "b_hispanic", "b_white", "phi"))
+```
+Unfortunately, the model does not converge.
+
+## Model 2.1.2: Attempting to Fix Convergence
+
+Again, we run into convergence issues with the initial nested model specification. I will use the same trick as before: applying inv_logit to keep the bounds on mu between 0 and 1, since this was what caused the initial errors.
+
+```{r, warning=FALSE, message=FALSE}
+set.seed(1)
+m_informative_12 <- ulam(
+  alist(
+    Pass_Rate ~ dbeta(mu, phi),
+    
+    # Applying logistic transformation with a safeguard for mu
+    mu <- inv_logit(a_school[School] + a_borough[Borough] +
+                 b_fl*fl_percent + b_ell*ell_percent +
+                 b_asian*asian_per + b_black*black_per +
+                 b_hispanic*hispanic_per + b_white*white_per),
+
+    a_school[School] ~ dnorm(a_borough[Borough], sigma_school),
+    sigma_school ~ dexp(1),
+    
+    a_borough[Borough] ~ dnorm(1, 2),
+    b_fl ~ dnorm(1, 0.5),
+    b_ell ~ dnorm(0.5, 1),
+    b_asian ~ dnorm(0.2, 1),
+    b_black ~ dnorm(0.2, 1),
+    b_hispanic ~ dnorm(0.2, 1.),
+    b_white ~ dnorm(0.2, 1),
+    phi ~ dexp(1)
+  ),
+  data = data3, chains = 4, cores = 4, log_lik = TRUE
+)
+```
+
+```{r}
+precis(m_informative_12)
+```
+
+```{r}
+traceplot(m_informative_12, pars = c("b_fl", "b_ell", "b_asian", "b_black", "b_hispanic", "b_white", "phi"))
+```
+Again, the model's warnings are eliminated when applying the trick, but the model does not converge. We will attempt a non-nested hierarchical model with the informative models and determine if anything changes.
+
+## Model 2.2: Non-Nested Hierarchical Model, Informative Priors
+
+Again, I will try another version of the Model 2.1: a non-nested hierarchical prior, again with weakly information priors. I will also build a non-nested hierarchical model to see if this would help with convergence issues.
+
+```{r, warning=FALSE, message=FALSE}
+set.seed(1)
+m_informative_2 <- ulam(
+  alist(
+    Pass_Rate ~ dbeta(mu, phi),
+    logit(mu) <- a_school[School] + a_borough[Borough] +
+                 b_fl*fl_percent + b_ell*ell_percent +
+                 b_asian*asian_per + b_black*black_per +
+                 b_hispanic*hispanic_per + b_white*white_per,
+    
+    a_school[School] ~ dnorm(0, 1),
+    a_borough[Borough] ~ dnorm(1, 2),
+    b_fl ~ dnorm(1, 0.5),
+    b_ell ~ dnorm(0.5, 1),
+    b_asian ~ dnorm(0.2, 1),
+    b_black ~ dnorm(0.2, 1),
+    b_hispanic ~ dnorm(0.2, 1.),
+    b_white ~ dnorm(0.2, 1),
+    phi ~ dexp(1)
+  ),
+  data = data3, chains = 4, cores = 4, log_lik = TRUE
+)
+```
+
+```{r}
+precis(m_informative_2)
+```
+
+Again, the Rhat values for b_fl, b_ell, b_asian, b_black, b_white, and phi are all 1. This seems to indicate that the model_uninformative_2 properly converged. Let's also check the traceplot to ensure that this is the case. 
+
+```{r}
+traceplot(m_informative_2, pars = c("b_fl", "b_ell", "b_asian", "b_black", "b_hispanic", "b_white", "phi"))
+```
+
+They do seem to be "fuzzy," normal-looking traceplot with no clear abnormalities within the traceplot. Thus, we can say that the m_informative_2, the model with informative priors with a non-hierarchical prior set-up, likely converged.
+
+# V. Conclusions
+
+## i. Comparisons
+
+I will compare all 6 models.
+
+```{r}
+compare(m_uninformative_1, m_uninformative_12, m_uninformative_2, m_informative_1, m_informative_12, m_informative_2)
+```
+
+Out of the six models, the model with the uninformative priors and the nesting structure has the lowest WAIC. This would suggest that model_uninformative_12 fits the data best. However, we should keep in mind that only the two non-nested model properly converged. Out of those two converged models, m_informative_2 performed the best. Thus, we should keep this as our "final model."
+
+## ii. Visualizations
+
+```{r}
+model_summary <- plot(m_informative_2, depth=1)
+```
+
+## iii. Summary and Implications
+
+In summary, we examined the effect of various sociodemographic factors on NY State Math Test results. We constrained the analysis to 8th graders in 2009 for practical purposes. Within those parameters, we used a Beta regression model 
+
+We can look at the overall distribution of our variables and summary statistics to see if the final model's results are in line with what we'd expect based on the distribution.
+
+```{r}
+summary(data3)
+```
+
+Let's consider the distributions of the response variable and some of our predictors. Since all of them are standardized between 0 and 1 as percentages, we can visualize their distributions accordingly.
+
+```{r}
+df_melted <- reshape2::melt(data3)
+
+ggplot(df_melted, aes(x = value)) + 
+  geom_histogram(bins = 30, fill = "blue", alpha = 0.7) + 
+  facet_wrap(~ variable, scales = "free") + 
+  theme_minimal() + 
+  labs(title = "Distribution of Variables", x = "Value", y = "Frequency") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+It seems that some of the predictors quite widely in their distributions. For example, looking at the third quantile racial composition predictors, it seems like Asian and white students seem to have lower enrollment rates at the schools within the dataset than Black and Hispanic students. Additionally, the percent of students eligible for free lunch is also skewed toward larger percentages, while the opposite is true for the proportion of English-language learners. Finally, inspecting the response variable, we see that pass_rates are better than chance, as the median pass_rate is around 0.6, and the distribution also seems to be bimodal.
+
+To summarize the models that were created, there were six in total: one for each different combinations of model structure and prior choice (uninformative vs. weakly informative and nested vs. non-nested). Additionally, I created another two models for the nesting because the initial ones did not converge, as demonstrated by high Rhat values, low n_eff values, and irregular traceplots for the sigma_school parameter. However, the additional transformation to try to keep mu values between 0 and 1 did not resolve the convergence issue with sigma_school. Only upon creating a non-nested model, were the models able to converge. 
+
+This suggests to me that the nested model's complexity, with multiple levels of hierarchy, may have introduced challenges in estimating the model parameters effectively. This could be due to over-parameterization or correlations within the data that the model struggled to capture. Another hypothesis would be that it's possible that the variation within schools did not significantly differ across boroughs: if schools don't exhibit clear grouping patterns within boroughs, the nested model may not be the most appropriate representation.
+
+While the improved convergence and performance of the non-nested model did not align with my initial hypothesis, the data might inherently have high variability that the nested models could not adequately capture. As I mentioned before, even if schools are logically nested within boroughs, the actual data might not reflect strong hierarchical patterns. For example, the variability within schools might not differ significantly across different boroughs, or the borough-level effects might be minimal compared to the school-level effects. This could lead to difficulties in estimating higher-level (borough) parameters accurately. 
+
+Turning to the "final model," the one that fit the data best AND converged was m_informative_2. This is the non-nested model with priors informed by previous literature. Interestingly, all models with informed priors outperformed all models with flat priors in terms of WAIC.
+
+For the final model, the only significant sociodemographic predictor that was significantly different from zero, was b_fl. B_fl is the coefficient for the percentage of students within a school who are eligible for free lunch. 
+
+```{r}
+post = extract.samples(m_informative_2)
+b_fl_samples <- post$b_fl
+HPDI(b_fl_samples)
+```
+This aligns with the previous literature, which found the economic indicators were the primary sociodemographic factor involved in determining perform on academic assessments. The findings indicate that race and status as an English-language learner, the other school-level features accounted for, were not significant predictors of pass rates for the NY State Math Test. Even when accounting for variations at the borough level, the results suggest that students' eligibility for free lunch (a direct proxy for socioeconomic status) was the most important factor of those tested within this project. While keeping in mind that the data is limited to 2008, the broader implications of these findings are that the state should likely devote more attention toward bridging gaps in income inequity if they aim to improve eighth graders' performance on the NY State Math Exam.
+
