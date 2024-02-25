@@ -13,10 +13,6 @@ Each year, New York public school students in grades 3-8 take a state-wide math 
 
 Additionally, demographic data is collected yearly on these same public schools. This data will be described further in the 'Data' section, but it generally includes school data on socioeconomic variables, ethnicity, gender, English-language learners, and special education rates. I use the term 'sociodemographic' factors to encompass both economic demographics (like the percentage of student on free lunch program) and social demographics (percent of students belonging to different races, percentage of male/female students, etc.). This term is used to concisely describe a broad range of social and economic variables.
 
-### ii. Data Context
-
-The exam data itself is used so that NY state can determine school-level mathematics performance. Schools with lower pass rates may receive additional state support, as lower pass rates indicate that the schools may not currently be meeting state-wide mathematics standards for grades 3 - 8. The data itself is released for public use, to inform the public of general school performance in the NY State Math Test. The school-level demographic information is used for similar reasons, as the state often makes financial and political decisions based on school demographics. I will use this data to understand how school-level socioeconomic factors are linked to school pass rates, while controlling for borough-level differences.
-
 ## II. Data
 
 The data needed to accomplish this project includes school-level information about sociodemographic factors as well as information about each borough in which each school is located. Such features were not present in a singular dataset, so I decided to merge two different datasets over the 2006 - 2012 time period from NYC Open Data, Department of Education. The datasets are as follows: “2006 - 2012 School Demographics and Accountability Snapshot” and “2006 - 2012 Math Test Results - All Students."
